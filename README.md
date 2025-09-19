@@ -1,13 +1,30 @@
-# React + Vite
+# 🌍 GeoGame (Offline Mode)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A simple **GeoGuessr-like game** built with **React + Material UI + Leaflet**.
+Instead of Mapillary or Google Street View, this version uses **local panorama images** stored in `public/panos`.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## ✨ Features
+- 🔹 **Offline panoramas**: 5 fixed locations with real coordinates
+  - `1.jpg` → Tokyo (Shibuya Crossing)
+  - `2.jpg` → Venice (Rialto Bridge)
+  - `3.jpg` → Alter do Chão (Brazil)
+  - `4.jpg` → Vancouver Downtown
+  - `5.jpg` → Paris (France)
+- 🔹 Interactive **guess map** (Leaflet + OpenStreetMap)
+- 🔹 **Timer** per round (90 seconds)
+- 🔹 **Scoring system** based on haversine distance
+- 🔹 **Round summary** + **Final summary**
 
-## Expanding the ESLint configuration
+---
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
-# GeoGame
+## 🛠 Tech Stack
+- [React](https://react.dev/)
+- [Material UI](https://mui.com/)
+- [Leaflet](https://leafletjs.com/) via [React-Leaflet](https://react-leaflet.js.org/)
+- Custom offline panorama loader
+
+---
+
+## 📂 Project Structure
