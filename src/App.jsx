@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AppBar,
   Toolbar,
@@ -6,108 +6,126 @@ import {
   Box,
   Button,
   Stack,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Backdrop,
   CircularProgress,
-  Container,
-  Grid,
+  Snackbar,
 } from "@mui/material";
 
-import PanoramaViewer from "./components/PanoramaViewer.jsx";
+import PlainImage from "./components/PlainImage.jsx";
 import GuessMap from "./components/GuessMap.jsx";
 import TimerBar from "./components/TimerBar.jsx";
 import RoundResultDialog from "./components/RoundResultDialog.jsx";
+import FinalSummaryDialog from "./components/FinalSummaryDialog.jsx";
+import StartDialog from "./components/StartDialog.jsx";
 
-import { getRandomImageFromRegions } from "./lib/mapillary.js";
+import { getRandomOfflinePanorama } from "./lib/offline.js";
 import { haversine, scoreByDistance_km } from "./lib/geo.js";
 
 const ROUNDS = 5;
 
 export default function App() {
-  const [region, setRegion] = useState("worldCities");
   const [round, setRound] = useState(1);
   const [score, setScore] = useState(0);
 
-  const [imageId, setImageId] = useState(null);
+  const [panoSrc, setPanoSrc] = useState(null);
   const [target, setTarget] = useState(null);
   const [guess, setGuess] = useState(null);
   const [locked, setLocked] = useState(false);
+  const [showAnswer, setShowAnswer] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
+  const [toast, setToast] = useState("");
 
   const [timerRunning, setTimerRunning] = useState(false);
   const [result, setResult] = useState(null);
   const [resultOpen, setResultOpen] = useState(false);
 
+  const [history, setHistory] = useState([]);
+  const [finalOpen, setFinalOpen] = useState(false);
+  const [startOpen, setStartOpen] = useState(false);
+
+  const isLastRound = round >= ROUNDS;
+  const totalPoints = useMemo(
+    () => history.reduce((acc, r) => acc + (r.points || 0), 0),
+    [history]
+  );
+
   async function loadRandomPanorama() {
     setLoading(true);
     setErr(null);
+    setPanoSrc(null);
+    setTarget(null);
     setGuess(null);
     setLocked(false);
+    setShowAnswer(false);
     setResult(null);
     setResultOpen(false);
     setTimerRunning(false);
 
     try {
-      const { imageId, target } = await getRandomImageFromRegions(region);
-      setImageId(imageId);
-      if (target) {
-        setTarget(target);
-        setTimerRunning(true);
-      }
+      const { src, target } = await getRandomOfflinePanorama();
+      console.log("[APP] src:", src, "target:", target);
+      setPanoSrc(src);
+      setTarget(target);
+      setTimerRunning(true);
     } catch (e) {
-      setErr(e.message || "Failed to load panorama.");
+      setErr(e.message || "Failed to load local panorama.");
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    loadRandomPanorama();
-  }, [round, region]);
+    if (!startOpen) loadRandomPanorama();
+  }, [round, startOpen]);
 
-  function handlePanoramaReady(pos) {
-    if (pos) {
-      setTarget(pos);
-      setTimerRunning(true);
-    }
+  function finalizeRound(d, pts) {
+    setResult({ d, pts });
+    setTimerRunning(false);
+    setLocked(true);
+    setShowAnswer(true);
+    setResultOpen(true);
+    setHistory((h) => [...h, { guess, target, distanceKm: d ?? 0, points: pts ?? 0 }]);
+    setScore((s) => s + (pts ?? 0));
   }
 
   function submit() {
     if (!guess || !target || locked) return;
-    setLocked(true);
     const d = haversine(guess.lat, guess.lng, target.lat, target.lng);
     const pts = scoreByDistance_km(d);
-    setScore((s) => s + pts);
-    setResult({ d, pts });
-    setTimerRunning(false);
-    setResultOpen(true);
+    finalizeRound(d, pts);
+    setToast(`+${pts} pts — ${d.toFixed(1)} km`);
   }
 
   function handleTimeout() {
     if (locked) return;
-    setTimerRunning(false);
-    setLocked(true);
     let d = 0;
-    if (guess && target) {
-      d = haversine(guess.lat, guess.lng, target.lat, target.lng);
-    }
-    setResult({ d, pts: 0 });
-    setResultOpen(true);
+    if (guess && target) d = haversine(guess.lat, guess.lng, target.lat, target.lng);
+    finalizeRound(d, 0);
+    setToast(`Time's up — 0 pts`);
   }
 
   function next() {
     setResultOpen(false);
-    if (round < ROUNDS) {
-      setRound((r) => r + 1);
+    if (isLastRound) {
+      setFinalOpen(true);
+      return;
     }
+    setRound((r) => r + 1);
   }
 
-  const isLastRound = round >= ROUNDS;
+  function restart() {
+    setHistory([]);
+    setScore(0);
+    setRound(1);
+    setFinalOpen(false);
+    setStartOpen(false);
+  }
+
+  function startGame() {
+    setStartOpen(false);
+  }
 
   return (
     <Box sx={{ height: "100vh", display: "flex", flexDirection: "column" }}>
@@ -116,46 +134,27 @@ export default function App() {
           <Typography variant="h6" sx={{ flexGrow: 1 }}>
             GeoGame
           </Typography>
-
           <Stack direction="row" spacing={2} alignItems="center">
-            <FormControl size="small" sx={{ minWidth: 180 }}>
-              <InputLabel>Region</InputLabel>
-              <Select
-                label="Region"
-                value={region}
-                onChange={(e) => setRegion(e.target.value)}
-                disabled={loading || timerRunning}
-              >
-                <MenuItem value="worldCities">World (Sample Cities)</MenuItem>
-                <MenuItem value="brazil">Brazil</MenuItem>
-                <MenuItem value="europe">Europe</MenuItem>
-                <MenuItem value="japan">Japan</MenuItem>
-              </Select>
-            </FormControl>
-
             <Typography>Round {round}/{ROUNDS}</Typography>
             <Typography>Score {score}</Typography>
-
             <Button
               variant="contained"
               onClick={submit}
-              disabled={!guess || !target || locked}
+              disabled={!guess || !target || locked || startOpen}
             >
               Submit
             </Button>
-
             <Button
               variant="outlined"
               onClick={next}
-              disabled={!locked || isLastRound}
+              disabled={!locked || startOpen}
             >
-              Next
+              {isLastRound ? "Finish" : "Next"}
             </Button>
-
             <Button
               variant="text"
               onClick={loadRandomPanorama}
-              disabled={loading}
+              disabled={loading || startOpen}
             >
               Shuffle
             </Button>
@@ -163,34 +162,61 @@ export default function App() {
         </Toolbar>
       </AppBar>
 
-      <TimerBar seconds={90} running={timerRunning} onTimeout={handleTimeout} />
+      {!startOpen && (
+        <TimerBar seconds={90} running={timerRunning} onTimeout={handleTimeout} />
+      )}
 
-      <Container maxWidth="xl" sx={{ flex: 1, py: 1 }}>
-        <Grid container spacing={1} sx={{ height: "100%" }}>
-          <Grid item xs={12} md={6} sx={{ height: { xs: 360, md: "calc(100vh - 160px)" } }}>
-            <Box sx={{ height: "100%", border: "1px solid #eee", borderRadius: 1, overflow: "hidden" }}>
-              {err ? (
-                <Box sx={{ p: 2 }}><Typography color="error">{err}</Typography></Box>
-              ) : imageId ? (
-                <PanoramaViewer imageId={imageId} onImage={handlePanoramaReady} />
-              ) : (
-                <Box sx={{ p: 2 }}><Typography>Waiting panorama…</Typography></Box>
-              )}
-            </Box>
-          </Grid>
+      <Box sx={{ flex: 1, p: 2, height: "calc(100vh - 140px)" }}>
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+            gap: 2,
+            height: "100%",
+          }}
+        >
+          <Box
+            sx={{
+              height: "100%",
+              border: "1px solid #eee",
+              borderRadius: 1,
+              overflow: "hidden",
+              background: "#fafafa",
+            }}
+          >
+            {err ? (
+              <Box sx={{ p: 2 }}>
+                <Typography color="error">{err}</Typography>
+              </Box>
+            ) : panoSrc ? (
+              <PlainImage src={panoSrc} />
+            ) : (
+              <Box sx={{ p: 2 }}>
+                <Typography>Waiting panorama…</Typography>
+              </Box>
+            )}
+          </Box>
 
-          <Grid item xs={12} md={6} sx={{ height: { xs: 360, md: "calc(100vh - 160px)" } }}>
-            <Box sx={{ height: "100%", border: "1px solid #eee", borderRadius: 1, overflow: "hidden" }}>
-              <GuessMap guess={guess} onGuess={setGuess} />
-            </Box>
-          </Grid>
-        </Grid>
-      </Container>
+          <Box
+            sx={{
+              height: "100%",
+              border: "1px solid #eee",
+              borderRadius: 1,
+              overflow: "hidden",
+              background: "#fafafa",
+            }}
+          >
+            <GuessMap
+              guess={guess}
+              target={target}
+              showAnswer={showAnswer}
+              onGuess={setGuess}
+            />
+          </Box>
+        </Box>
+      </Box>
 
-      <Backdrop
-        open={loading}
-        sx={{ color: "#fff", zIndex: (t) => t.zIndex.drawer + 1 }}
-      >
+      <Backdrop open={loading} sx={{ color: "#fff", zIndex: (t) => t.zIndex.drawer + 1 }}>
         <CircularProgress />
       </Backdrop>
 
@@ -201,6 +227,28 @@ export default function App() {
         onNext={next}
         onClose={() => setResultOpen(false)}
         isLast={isLastRound}
+      />
+
+      <FinalSummaryDialog
+        open={finalOpen}
+        rounds={history}
+        total={totalPoints}
+        onRestart={restart}
+        onClose={() => setFinalOpen(false)}
+      />
+
+      <StartDialog
+        open={startOpen}
+        region={"worldCities"}
+        setRegion={() => {}}
+        onStart={startGame}
+      />
+
+      <Snackbar
+        open={!!toast}
+        autoHideDuration={2000}
+        onClose={() => setToast("")}
+        message={toast}
       />
     </Box>
   );
