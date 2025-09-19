@@ -5,8 +5,8 @@ export default function RoundResultDialog({ open, distanceKm, points, onNext, on
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle>Round result</DialogTitle>
       <DialogContent>
-        <Stack direction="row" spacing={1} sx={{ mt:1 }}>
-          <Chip label={`${distanceKm?.toFixed(1) ?? "-"} km`} color="default" />
+        <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+          <Chip label={`${distanceKm?.toFixed(1) ?? "-"} km`} />
           <Chip label={`+${points ?? 0} pts`} color="primary" />
         </Stack>
       </DialogContent>

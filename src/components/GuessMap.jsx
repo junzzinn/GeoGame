@@ -1,34 +1,63 @@
-import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
+import { useEffect } from "react";
+import { MapContainer, TileLayer, Marker, Polyline, useMapEvents, useMap } from "react-leaflet";
 import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 
-const markerIcon = new L.Icon({
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-});
+import iconUrl from "leaflet/dist/images/marker-icon.png";
+import icon2xUrl from "leaflet/dist/images/marker-icon-2x.png";
+import shadowUrl from "leaflet/dist/images/marker-shadow.png";
+const DefaultIcon = L.icon({ iconUrl, iconRetinaUrl: icon2xUrl, shadowUrl, iconSize: [25, 41], iconAnchor: [12, 41] });
+L.Marker.prototype.options.icon = DefaultIcon;
 
-function ClickHandler({ onGuess }) {
+function ClickToGuess({ onGuess }) {
   useMapEvents({
     click(e) {
-      onGuess({ lat: e.latlng.lat, lng: e.latlng.lng });
+      const { lat, lng } = e.latlng;
+      onGuess?.({ lat, lng });
     },
   });
   return null;
 }
 
-export default function GuessMap({ guess, onGuess }) {
+function FitAfterSubmit({ guess, target, showAnswer }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!showAnswer || !guess || !target) return;
+    const b = L.latLngBounds([guess.lat, guess.lng], [target.lat, target.lng]);
+    map.fitBounds(b, { padding: [40, 40] });
+  }, [map, guess, target, showAnswer]);
+  return null;
+}
+
+export default function GuessMap({ guess, target, showAnswer, onGuess }) {
+  const center = guess ? [guess.lat, guess.lng] : [20, 0];
+  const zoom = guess ? 4 : 2;
+
   return (
     <MapContainer
-      center={[20, 0]}
-      zoom={2}
+      center={center}
+      zoom={zoom}
       style={{ width: "100%", height: "100%" }}
+      worldCopyJump
+      minZoom={2}
+      maxZoom={18}
+      scrollWheelZoom
     >
       <TileLayer
         attribution='&copy; OpenStreetMap'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      <ClickHandler onGuess={onGuess} />
-      {guess && <Marker icon={markerIcon} position={[guess.lat, guess.lng]} />}
+
+      <ClickToGuess onGuess={onGuess} />
+      <FitAfterSubmit guess={guess} target={target} showAnswer={showAnswer} />
+
+      {guess && <Marker position={[guess.lat, guess.lng]} />}
+      {showAnswer && target && (
+        <>
+          <Marker position={[target.lat, target.lng]} />
+          {guess && <Polyline positions={[[guess.lat, guess.lng], [target.lat, target.lng]]} />}
+        </>
+      )}
     </MapContainer>
   );
 }
